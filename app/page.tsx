@@ -19,7 +19,7 @@ interface WalletCheckResponse {
 }
 
 export default function Home() {
-  const { isFrameReady, setFrameReady, context } = useMiniKit();
+  const { isFrameReady, setFrameReady, context: _context } = useMiniKit();
 
   // Init MiniKit
   useEffect(() => {
