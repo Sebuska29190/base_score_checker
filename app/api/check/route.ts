@@ -3,44 +3,43 @@
 
 import { NextRequest, NextResponse } from "next/server";
 
-const ETHERSCAN_API = "https://api.etherscan.io/v2/api";
-const CHAIN_ID = 8453;
+// Ustaw swój Infura Base Mainnet RPC URL
+const RPC_URL =
+  process.env.INFURA_BASE_RPC_URL || "https://base-mainnet.infura.io/v3/<YOUR_INFURA_PROJECT_ID>";
 
-async function safeEtherscanFetch(url: string) {
-  const res = await fetch(url);
-  const text = await res.text();
-  let json;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    console.error("Non‑JSON Etherscan response", text);
-    throw new Error("NonJSON Etherscan response");
+// helper: wykonanie JSON‑RPC do Infura
+async function rpcCall(method: string, params: any[]) {
+  const body = {
+    jsonrpc: "2.0",
+    id: 1,
+    method,
+    params,
+  };
+
+  const res = await fetch(RPC_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  const json = await res.json();
+  if (json.error) {
+    throw new Error(json.error.message || "RPC error");
   }
-  return json;
+
+  return json.result;
 }
 
 async function getBalance(address: string) {
-  const url = `${ETHERSCAN_API}?chainid=${CHAIN_ID}&module=account&action=balance&address=${address}&tag=latest&apikey=${process.env.ETHERSCAN_API_KEY}`;
-  const data: any = await safeEtherscanFetch(url);
-
-  if (data.status !== "1") {
-    console.error("Etherscan balance error", data);
-    throw new Error(data.message || "Balance error");
-  }
-
-  return Number(data.result ?? 0) / 1e18;
+  // eth_getBalance zwraca hex z saldem w wei
+  const balanceHex = await rpcCall("eth_getBalance", [address, "latest"]);
+  return parseInt(balanceHex as string, 16) / 1e18;
 }
 
-async function getTxListLength(address: string) {
-  const url = `${ETHERSCAN_API}?chainid=${CHAIN_ID}&module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&sort=asc&apikey=${process.env.ETHERSCAN_API_KEY}`;
-  const data: any = await safeEtherscanFetch(url);
-
-  if (data.status !== "1") {
-    console.error("Etherscan txlist error", data);
-    throw new Error(data.message || "Txlist error");
-  }
-
-  return Array.isArray(data.result) ? data.result.length : 0;
+async function getTxCount(address: string) {
+  // eth_getTransactionCount zwraca liczbe wyslanych tx (nonce)
+  const txHex = await rpcCall("eth_getTransactionCount", [address, "latest"]);
+  return parseInt(txHex as string, 16);
 }
 
 function computeScore(balance: number, txCount: number) {
@@ -65,20 +64,30 @@ export async function POST(request: NextRequest) {
     const wallet = typeof body.wallet === "string" ? body.wallet.trim() : "";
 
     if (!wallet) {
-      return NextResponse.json({ success: false, message: "Wallet required" }, { status: 400 });
-    }
-
-    if (!process.env.ETHERSCAN_API_KEY) {
-      return NextResponse.json({ success: false, message: "Missing API key" }, { status: 500 });
+      return NextResponse.json(
+        { success: false, message: "Wallet address required" },
+        { status: 400 }
+      );
     }
 
     const balance = await getBalance(wallet);
-    const txCount = await getTxListLength(wallet);
+    const txCount = await getTxCount(wallet);
     const score = computeScore(balance, txCount);
     const badge = computeBadge(score);
 
-    return NextResponse.json({ success: true, wallet, balance, txCount, score, badge });
-  } catch {
-    return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
+    return NextResponse.json({
+      success: true,
+      wallet,
+      balance,
+      txCount,
+      score,
+      badge,
+    });
+  } catch (err) {
+    console.error("RPC error:", err);
+    return NextResponse.json(
+      { success: false, message: (err as Error).message },
+      { status: 500 }
+    );
   }
 }
