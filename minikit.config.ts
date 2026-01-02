@@ -18,7 +18,7 @@ export const minikitConfig = {
   miniapp: {
     version: "1",
     name: "Base Score Checker",
-    subtitle: "Check your wallet score instantly",
+    subtitle: "check your wallet score",
     description: "calculates your wallet score",
     screenshotUrls: [`${ROOT_URL}/screenshot-portrait.png`],
     iconUrl: `${ROOT_URL}/blue-icon.png`,
