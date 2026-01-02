@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const API_KEY = process.env.NEXT_PUBLIC_BASESCAN_API_KEY;
-const BASESCAN_API = "https://api.basescan.org/api";
+const BASESCAN_API = "https://api.etherscan.io/v2/api";
 
 async function getBalance(address: string) {
   const res = await fetch(
