@@ -32,7 +32,7 @@ export const minikitConfig = {
     tagline: "Base score checker",
     ogTitle: "Score Checker",
     ogDescription: "Base Score checker",
-    ogImageUrl: `${ROOT_URL}/blue-hero.png`
+    ogImageUrl: `${ROOT_URL}/blue-hero.png`,
     "noindex": true
   }
 } as const;
