@@ -1,59 +1,47 @@
 "use client";
-import { useState } from "react";
+import { useEffect } from "react";
+import { useQuickAuth, useMiniKit } from "@coinbase/onchainkit/minikit";
+import { minikitConfig } from "../minikit.config";
+import styles from "./page.module.css";
+
+// Typ odpowiedzi API
+interface WalletCheckResponse {
+  success: boolean;
+  user?: {
+    fid: number;
+    wallet?: string;
+    score?: number;
+    badges?: string[];
+    issuedAt?: number;
+    expiresAt?: number;
+  };
+  message?: string;
+}
 
 export default function Home() {
-  const [wallet, setWallet] = useState("");
-  const [result, setResult] = useState<{ ethBalance: number } | null>(null);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const { isFrameReady, setFrameReady, context } = useMiniKit();
 
-  const handleCheck = async () => {
-    setLoading(true);
-    setError("");
-    setResult(null);
+  // Init MiniKit
+  useEffect(() => {
+    if (!isFrameReady) setFrameReady();
+  }, [isFrameReady, setFrameReady]);
 
-    try {
-      const res = await fetch("/api/check-wallet", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wallet }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || "Unknown error");
-      } else {
-        setResult({ ethBalance: data.ethBalance });
-      }
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Wywołanie API wallet check
+  const { data, isLoading, error } = useQuickAuth<WalletCheckResponse>(
+    "/api/check",
+    { method: "GET" }
+  );
 
   return (
-    <div style={{ padding: 40 }}>
-      <h1>Base Score Checker</h1>
-      <input
-        type="text"
-        placeholder="Enter Base wallet address"
-        value={wallet}
-        onChange={(e) => setWallet(e.target.value)}
-        style={{ width: 400, padding: 10 }}
-      />
-      <button onClick={handleCheck} style={{ marginLeft: 10, padding: "10px 20px" }}>
-        {loading ? "Checking..." : "Check Wallet"}
-      </button>
-
-      {error && <p style={{ color: "red" }}>{error}</p>}
-
-      {result && (
-        <div style={{ marginTop: 20 }}>
-          <p>Wallet: {wallet}</p>
-          <p>ETH Balance: {result.ethBalance} ETH</p>
-        </div>
-      )}
+    <div className={styles.container}>
+      <h1 className={styles.title}>{minikitConfig.miniapp.name.toUpperCase()}</h1>
+      <p className={styles.subtitle}>
+        {isLoading && "Checking your wallet..."}
+        {error && `Error: ${error.message}`}
+        {data?.success && data.user
+          ? `Wallet: ${data.user.wallet} | Score: ${data.user.score} | Badges: ${data.user.badges?.join(", ")}`
+          : ""}
+      </p>
     </div>
   );
 }
