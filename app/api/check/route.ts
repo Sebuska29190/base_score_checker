@@ -45,9 +45,9 @@ export async function GET(request: NextRequest) {
   try {
     // Weryfikacja JWT
     const payload = await client.verifyJwt({
-      token: authorization.split(" ")[1],
-      domain: getUrlHost(request),
-    }) as WalletCheckPayload;
+  token: authorization.split(" ")[1],
+  domain: getUrlHost(request),
+}) as unknown as WalletCheckPayload;
 
     // TODO: tutaj możesz dodać wywołanie BaseScan API, żeby policzyć score portfela
     // przykładowo: const walletScore = await fetchBaseScore(payload.wallet);
