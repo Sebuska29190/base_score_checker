@@ -3,27 +3,26 @@ import { NextRequest, NextResponse } from "next/server";
 
 const client = createClient();
 
-// Typ odpowiedzi po weryfikacji JWT
-interface WalletCheckPayload {
-  sub: number;         // FID użytkownika
-  iat: number;         // issued at
-  exp: number;         // expires at
-  wallet: string;      // adres portfela
-  score: number;       // score portfela
-  badges: string[];    // zdobyte odznaki
-}
-
-// Helper do pobrania hosta
+// Helper function to determine the correct domain for JWT verification
 function getUrlHost(request: NextRequest): string {
+  // First try to get the origin from the Origin header (most reliable for CORS requests)
   const origin = request.headers.get("origin");
   if (origin) {
     try {
-      return new URL(origin).host;
-    } catch {}
+      const url = new URL(origin);
+      return url.host;
+    } catch (error) {
+      console.warn("Invalid origin header:", origin, error);
+    }
   }
-  const host = request.headers.get("host");
-  if (host) return host;
 
+  // Fallback to Host header
+  const host = request.headers.get("host");
+  if (host) {
+    return host;
+  }
+
+  // Final fallback to environment variables (your original logic)
   let urlValue: string;
   if (process.env.VERCEL_ENV === "production") {
     urlValue = process.env.NEXT_PUBLIC_URL!;
@@ -32,33 +31,40 @@ function getUrlHost(request: NextRequest): string {
   } else {
     urlValue = "http://localhost:3000";
   }
-  return new URL(urlValue).host;
+
+  const url = new URL(urlValue);
+  return url.host;
 }
 
 export async function GET(request: NextRequest) {
+  // Because we're fetching this endpoint via `sdk.quickAuth.fetch`,
+  // if we're in a mini app, the request will include the necessary `Authorization` header.
   const authorization = request.headers.get("Authorization");
 
+  // Here we ensure that we have a valid token.
   if (!authorization || !authorization.startsWith("Bearer ")) {
     return NextResponse.json({ message: "Missing token" }, { status: 401 });
   }
 
   try {
-    // Weryfikacja JWT
+    // Now we verify the token. `domain` must match the domain of the request.
+    // In our case, we're using the `getUrlHost` function to get the domain of the request
+    // based on the Vercel environment. This will vary depending on your hosting provider.
     const payload = await client.verifyJwt({
-      token: authorization.split(" ")[1],
+      token: authorization.split(" ")[1] as string,
       domain: getUrlHost(request),
-    }) as WalletCheckPayload;
+    });
 
-    // TODO: tutaj możesz dodać wywołanie BaseScan API, żeby policzyć score portfela
-    // przykładowo: const walletScore = await fetchBaseScore(payload.wallet);
+    console.log("payload", payload);
 
+    // If the token was valid, `payload.sub` will be the user's Farcaster ID.
+    const userFid = payload.sub;
+
+    // Return user information for your waitlist application
     return NextResponse.json({
       success: true,
       user: {
-        fid: payload.sub,
-        wallet: payload.wallet,
-        score: payload.score,
-        badges: payload.badges,
+        fid: userFid,
         issuedAt: payload.iat,
         expiresAt: payload.exp,
       },
