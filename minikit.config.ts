@@ -19,7 +19,7 @@ export const minikitConfig = {
     version: "1",
     name: "Base Score Checker",
     subtitle: "Check your wallet score instantly",
-    description: "Automatically detects your Base wallet and calculates your wallet score or badge eligibility",
+    description: "calculates your wallet score",
     screenshotUrls: [`${ROOT_URL}/screenshot-portrait.png`],
     iconUrl: `${ROOT_URL}/blue-icon.png`,
     splashImageUrl: `${ROOT_URL}/blue-hero.png`,
@@ -29,9 +29,10 @@ export const minikitConfig = {
     primaryCategory: "social",
     tags: ["marketing", "ads", "quickstart", "waitlist"],
     heroImageUrl: `${ROOT_URL}/blue-hero.png`,
-    tagline: "",
-    ogTitle: "",
-    ogDescription: "",
+    tagline: "Base score checker",
+    ogTitle: "Score Checker",
+    ogDescription: "Base Score checker",
     ogImageUrl: `${ROOT_URL}/blue-hero.png`
+    noindex: true
   }
 } as const;
