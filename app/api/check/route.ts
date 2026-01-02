@@ -1,24 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
 
-const API_KEY = process.env.NEXT_PUBLIC_BASESCAN_API_KEY;
-const BASESCAN_API = "https://api.etherscan.io/v2/api";
+// Etherscan API V2 dla Base Mainnet (chainid = 8453)
+const ETHERSCAN_API = "https://api.etherscan.io/v2/api";
+const CHAIN_ID = 8453; // Base Mainnet
 
+// Pobiera native balance (saldo) z Etherscan
 async function getBalance(address: string) {
-  const res = await fetch(
-    `${BASESCAN_API}?module=account&action=balance&address=${address}&tag=latest&apikey=${API_KEY}`
-  );
+  const url = `${ETHERSCAN_API}?chainid=${CHAIN_ID}&module=account&action=balance&address=${address}&tag=latest&apikey=${process.env.ETHERSCAN_API_KEY}`;
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    const text = await res.text();
+    console.error("Etherscan balance error:", res.status, text);
+    throw new Error("Balance fetch failed");
+  }
+
   const data = await res.json();
-  return Number(data.result ?? 0) / 1e18;
+  // Etherscan API V2 zwraca "result" jako string z liczba w wei
+  const balanceWei = data.result ?? "0";
+  const balance = Number(balanceWei) / 1e18;
+  return balance;
 }
 
+// Pobiera listę transakcji i liczy ich ilość
 async function getTxListLength(address: string) {
-  const res = await fetch(
-    `${BASESCAN_API}?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&sort=asc&apikey=${API_KEY}`
-  );
+  const url = `${ETHERSCAN_API}?chainid=${CHAIN_ID}&module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&sort=asc&apikey=${process.env.ETHERSCAN_API_KEY}`;
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    const text = await res.text();
+    console.error("Etherscan txlist error:", res.status, text);
+    throw new Error("Tx list fetch failed");
+  }
+
   const data = await res.json();
-  return Array.isArray(data.result) ? data.result.length : 0;
+  const result = Array.isArray(data.result) ? data.result : [];
+  return result.length;
 }
 
+// Prosty scoring na podstawie salda i liczby transakcji
 function computeScore(balance: number, txCount: number) {
   let score = 0;
   if (balance > 0.1) score += 20;
@@ -28,6 +48,7 @@ function computeScore(balance: number, txCount: number) {
   return Math.min(score, 100);
 }
 
+// Nadawanie odznaki wg score
 function computeBadge(score: number) {
   if (score >= 80) return "Gold";
   if (score >= 50) return "Silver";
@@ -35,6 +56,7 @@ function computeBadge(score: number) {
   return "Newbie";
 }
 
+// Główny handler dla POST /api/check
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -47,8 +69,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Pobranie salda i liczby transakcji
     const balance = await getBalance(wallet);
     const txCount = await getTxListLength(wallet);
+
     const score = computeScore(balance, txCount);
     const badge = computeBadge(score);
 
@@ -60,9 +84,10 @@ export async function POST(request: NextRequest) {
       score,
       badge,
     });
-  } catch {
+  } catch (error) {
+    console.error("API /api/check error:", error);
     return NextResponse.json(
-      { success: false, message: "Failed to fetch data" },
+      { success: false, message: (error as Error).message || "Unknown error" },
       { status: 500 }
     );
   }
