@@ -1,76 +1,67 @@
-import { Errors, createClient } from "@farcaster/quick-auth";
 import { NextRequest, NextResponse } from "next/server";
 
-const client = createClient();
+const API_KEY = process.env.NEXT_PUBLIC_BASESCAN_API_KEY;
+const BASESCAN_API = "https://api.basescan.org/api";
 
-// Typ odpowiedzi po weryfikacji JWT
-interface WalletCheckPayload {
-  sub: number;         // FID użytkownika
-  iat: number;         // issued at
-  exp: number;         // expires at
-  wallet: string;      // adres portfela
-  score: number;       // score portfela
-  badges: string[];    // zdobyte odznaki
+async function getBalance(address: string) {
+  const url = `${BASESCAN_API}?module=account&action=balance&address=${address}&tag=latest&apikey=${API_KEY}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  return Number(data.result ?? 0) / 1e18;
 }
 
-// Helper do pobrania hosta
-function getUrlHost(request: NextRequest): string {
-  const origin = request.headers.get("origin");
-  if (origin) {
-    try {
-      return new URL(origin).host;
-    } catch {}
-  }
-  const host = request.headers.get("host");
-  if (host) return host;
-
-  let urlValue: string;
-  if (process.env.VERCEL_ENV === "production") {
-    urlValue = process.env.NEXT_PUBLIC_URL!;
-  } else if (process.env.VERCEL_URL) {
-    urlValue = `https://${process.env.VERCEL_URL}`;
-  } else {
-    urlValue = "http://localhost:3000";
-  }
-  return new URL(urlValue).host;
+async function getTxListLength(address: string) {
+  const url = `${BASESCAN_API}?module=account&action=txlist&address=${address}&startblock=0&endblock=99999999&sort=asc&apikey=${API_KEY}`;
+  const res = await fetch(url);
+  const data = await res.json();
+  return Array.isArray(data.result) ? data.result.length : 0;
 }
 
-export async function GET(request: NextRequest) {
-  const authorization = request.headers.get("Authorization");
+function computeScore(balance: number, txCount: number) {
+  let score = 0;
+  if (balance > 0.1) score += 20;
+  if (balance > 1) score += 30;
+  if (txCount > 10) score += 20;
+  if (txCount > 50) score += 30;
+  return Math.min(score, 100);
+}
 
-  if (!authorization || !authorization.startsWith("Bearer ")) {
-    return NextResponse.json({ message: "Missing token" }, { status: 401 });
+function computeBadge(score: number) {
+  if (score >= 80) return "Gold";
+  if (score >= 50) return "Silver";
+  if (score >= 20) return "Bronze";
+  return "Newbie";
+}
+
+export async function POST(request: NextRequest) {
+  const body = await request.json();
+  const wallet = typeof body.wallet === "string" ? body.wallet.trim() : "";
+
+  if (!wallet) {
+    return NextResponse.json(
+      { success: false, message: "Wallet address is required" },
+      { status: 400 }
+    );
   }
 
   try {
-    // Weryfikacja JWT
-    const payload = await client.verifyJwt({
-  token: authorization.split(" ")[1],
-  domain: getUrlHost(request),
-}) as unknown as WalletCheckPayload;
-
-    // TODO: tutaj możesz dodać wywołanie BaseScan API, żeby policzyć score portfela
-    // przykładowo: const walletScore = await fetchBaseScore(payload.wallet);
+    const balance = await getBalance(wallet);
+    const txCount = await getTxListLength(wallet);
+    const score = computeScore(balance, txCount);
+    const badge = computeBadge(score);
 
     return NextResponse.json({
       success: true,
-      user: {
-        fid: payload.sub,
-        wallet: payload.wallet,
-        score: payload.score,
-        badges: payload.badges,
-        issuedAt: payload.iat,
-        expiresAt: payload.exp,
-      },
+      wallet,
+      balance,
+      txCount,
+      score,
+      badge,
     });
-
-  } catch (e) {
-    if (e instanceof Errors.InvalidTokenError) {
-      return NextResponse.json({ message: "Invalid token" }, { status: 401 });
-    }
-    if (e instanceof Error) {
-      return NextResponse.json({ message: e.message }, { status: 500 });
-    }
-    throw e;
+  } catch (err) {
+    return NextResponse.json(
+      { success: false, message: "Failed to fetch data" },
+      { status: 500 }
+    );
   }
 }
